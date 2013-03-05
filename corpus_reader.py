@@ -19,13 +19,18 @@ def _funcsig(func):
 
 PICKLED_DIRECTORY = '.pickled'
 
-def _write_corpus(name, postfunc, pickle_file):
+def _write_corpus(name, postfunc, pickle_file, args, kwargs):
     '''Writes a compressed pickled corpus to a file'''
     with BZ2File(pickle_file, 'w', 0, 1) as f:
         corpus = getattr(nltk.corpus, name)
 
+        if not args:
+            args = []
+        if not kwargs:
+            kwargs = {}
+
         # Read the tagged sentences from the corpus
-        sents = list(corpus.tagged_sents())
+        sents = list(corpus.tagged_sents(*args, **kwargs))
 
         # Apply the post processing function
         if postfunc:
@@ -39,7 +44,7 @@ def _read_corpus(pickle_file):
     with BZ2File(pickle_file, 'r') as f:
         return pickle.load(f)
 
-def read_corpus(name, postfunc=None):
+def read_corpus(name, postfunc=None, args=None, kwargs=None):
     '''Returns the named corpus after applying the post processing function'''
     # Create directory for corpus pickles
     if os.path.exists(PICKLED_DIRECTORY):
@@ -51,6 +56,6 @@ def read_corpus(name, postfunc=None):
     pickle_file = PICKLED_DIRECTORY + '/{}-{}.pickle.bz2'.format(name, _funcsig(postfunc))
 
     if not os.path.isfile(pickle_file) or os.stat(pickle_file).st_size == 0:
-        return _write_corpus(name, postfunc, pickle_file)
+        return _write_corpus(name, postfunc, pickle_file, args, kwargs)
     else:
         return _read_corpus(pickle_file)
