@@ -1,1 +1,17 @@
 venv*
+
+# Ignore pickled things
+*.pickle
+
+# Ignore the maxent training binary
+megam_*
+
+# Ignore PyPy's cache
+__pycache__/
+
+# Ignore pickled corpus directory
+.pickled/
+
+# Ignore pyc and pyo
+*.pyc
+*.pyo

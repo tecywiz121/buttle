@@ -1,3 +1,3 @@
 PyYAML==3.10
-nltk==2.0.4
+git+https://github.com/nltk/nltk.git#nltk==3.0a1
 wsgiref==0.1.2
