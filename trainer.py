@@ -3,6 +3,10 @@ from nltk import UnigramTagger, BigramTagger, TrigramTagger
 from nltk.tag.sequential import ClassifierBasedPOSTagger
 from classify import megam, MaxentClassifier
 
+from nltk.tag.brill import SymmetricProximateTokensTemplate,        \
+                            ProximateTagsRule, ProximateWordsRule,  \
+                            ProximateTokensTemplate,                \
+                            FastBrillTaggerTrainer
 try:
     import cPickle as pickle
 except ImportError:
@@ -38,6 +42,27 @@ def train_maxent(train_data, max_iter, min_lldelta, backoff=None):
     return ClassifierBasedPOSTagger(backoff=backoff, train=train_data,
                                     classifier_builder=_maxent_train(max_iter,
                                                                      min_lldelta))
+
+def train_brill(train_data, n_rules, initial=None, backoff=None):
+    templates = [
+        SymmetricProximateTokensTemplate(ProximateTagsRule, (1,1)),
+        SymmetricProximateTokensTemplate(ProximateTagsRule, (2,2)),
+        SymmetricProximateTokensTemplate(ProximateTagsRule, (1,2)),
+        SymmetricProximateTokensTemplate(ProximateTagsRule, (1,3)),
+        SymmetricProximateTokensTemplate(ProximateWordsRule, (1,1)),
+        SymmetricProximateTokensTemplate(ProximateWordsRule, (2,2)),
+        SymmetricProximateTokensTemplate(ProximateWordsRule, (1,2)),
+        SymmetricProximateTokensTemplate(ProximateWordsRule, (1,3)),
+        ProximateTokensTemplate(ProximateTagsRule, (-1, -1), (1,1)),
+        ProximateTokensTemplate(ProximateWordsRule, (-1, -1), (1,1)),
+    ]
+
+    trainer = FastBrillTaggerTrainer(initial_tagger=initial,
+                                     templates=templates, trace=3,
+                                     deterministic=True)
+
+    return trainer.train(train_data, max_rules=n_rules)
+
 def _tagger_name(tagger):
     '''Returns the name of a single tagger'''
     name = type(tagger).__name__.replace('Tagger', '').lower()
@@ -49,11 +74,11 @@ def _tagger_name(tagger):
 def _tagger_chain(tagger):
     '''Returns a hyphen seperated string of tagger names'''
     stack = [_tagger_name(tagger)]
-    current = tagger.backoff
+    current = getattr(tagger, 'backoff', getattr(tagger, '_initial_tagger', None))
     while current:
         name = _tagger_name(current)
         stack.append(name)
-        current = current.backoff
+        current = getattr(current, 'backoff', getattr(current, '_initial_tagger', None))
     stack.reverse()
     return '-'.join(stack)
 
@@ -69,6 +94,8 @@ def _populate_args(parser):
     parser.add_argument('-d', '--minlldelta', help='Min ll delta for maxent', type=float)
     parser.add_argument('-b', '--backoff', help='Specify the name of a pickled tagger to use as the backoff tagger')
     parser.add_argument('-c', '--cutoff', help='Any n-gram with less than cutoff occurances will be discarded', type=int)
+    parser.add_argument('-r', '--rules', help='Number of rules for a brill tagger', type=int)
+    parser.add_argument('-a', '--initial', help='The name of a pickled tagger to use as the initial tagger')
 
 if __name__ == '__main__':
     # Parse the command line options
@@ -102,6 +129,10 @@ if __name__ == '__main__':
     if cutoff is None:
         cutoff = 0
 
+    rules = args.rules
+    if rules is None:
+        rules = 100
+
     # Cut up the corpus
     test_data = corpus[:n_test]
     train_data = corpus[n_test:n_test+n_train]
@@ -112,6 +143,13 @@ if __name__ == '__main__':
             backoff = pickle.load(f)
     else:
         backoff = None
+
+    # Load the initial tagger if specified
+    if args.initial:
+        with open(args.initial + '.pickle', 'rb') as f:
+            initial = pickle.load(f)
+    else:
+        initial = None
 
     # Run the training!
     if args.tagger == 'unigram':
@@ -124,6 +162,8 @@ if __name__ == '__main__':
         tagger = train_naive(train_data, backoff=backoff)
     elif args.tagger == 'maxent':
         tagger = train_maxent(train_data, n_iterations, min_lldelta, backoff=backoff)
+    elif args.tagger == 'brill':
+        tagger = train_brill(train_data, rules, initial=initial, backoff=backoff)
 
     # Evaluate the tagger
     print args.tagger + ':', tagger.evaluate(test_data)
